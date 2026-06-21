@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jarvis AI</title>
+
+    <!-- Подключаем внешние библиотеки -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+
+    <style>
+        /* ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===== */
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1f2b;
+            --bg-card: #232a38;
+            --bg-input: #2a3346;
+            --text-primary: #e8ecf4;
+            --text-secondary: #a0b0c8;
+            --accent: #7c6df0;
+            --accent-gradient: linear-gradient(135deg, #7c6df0, #b47af0);
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --radius: 16px;
+            --transition: 0.25s ease;
+        }
+        /* Светлая тема */
+        body.light {
+            --bg-primary: #f0f2f7;
+            --bg-secondary: #ffffff;
+            --bg-card: #e8ecf3;
+            --bg-input: #dce0e9;
+            --text-primary: #1a1f2b;
+            --text-secondary: #4a5568;
+            --shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: var(--bg-primary); color: var(--text-primary); height: 100vh; overflow: hidden; transition: background var(--transition), color var(--transition); }
+
+        #app { display: flex; height: 100vh; max-width: 1400px; margin: 0 auto; background: var(--bg-secondary); box-shadow: var(--shadow); position: relative; }
+
+        /* ===== БОКОВАЯ ПАНЕЛЬ ===== */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-card);
+            border-right: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: transform 0.3s ease;
+            z-index: 10;
+            position: relative;
+        }
+        .sidebar-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-secondary);
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+        .sidebar-header h2 {
+            font-size: 22px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+        .sidebar-header .actions {
+            display: flex;
+            gap: 8px;
+        }
+        .sidebar-header button {
+            background: rgba(255,255,255,0.08);
+            border: none;
+            color: var(--text-secondary);
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sidebar-header button:hover { background: var(--accent); color: #fff; }
+
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 12px;
+        }
+        .chat-item {
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: transparent;
+            border: 1px solid transparent;
+        }
+        .chat-item:hover { background: rgba(124, 109, 240, 0.08); border-color: rgba(124,109,240,0.2); }
+        .chat-item.active { background: rgba(124, 109, 240, 0.15); border-color: var(--accent); }
+        .chat-item .title {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }
+        .chat-item .actions {
+            display: flex;
+            gap: 6px;
+        }
+        .chat-item .actions button {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+        .chat-item .actions button:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+        .chat-item .actions .del-btn:hover { color: #f87171; }
+
+        .sidebar-footer {
+            padding: 12px 20px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            border-radius: 0 0 var(--radius) var(--radius);
+        }
+        .sidebar-footer button {
+            background: none;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .sidebar-footer button:hover { text-decoration: underline; }
+
+        /* ===== ОСНОВНАЯ ОБЛАСТЬ ===== */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background: var(--bg-primary);
+        }
+
+        /* Шапка чата */
+        .chat-header {
+            padding: 12px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-shrink: 0;
+            background: var(--bg-secondary);
+            flex-wrap: wrap;
+        }
+        .chat-header .hamburger {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .chat-header .title-area {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .chat-header .title-area .title {
+            font-weight: 600;
+            font-size: 16px;
+            cursor: default;
+        }
+        .chat-header .title-area .rename-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+        .chat-header .title-area .rename-btn:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+        .chat-header .title-area .rename-input {
+            background: var(--bg-input);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 4px 10px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 600;
+            outline: none;
+            width: 200px;
+        }
+        .chat-header .mode-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-input);
+            padding: 4px 12px 4px 16px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .chat-header .mode-selector label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .chat-header .mode-selector select {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            padding: 6px 0;
+            outline: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .chat-header .mode-selector select option { background: var(--bg-card); }
+
+        /* Окно сообщений */
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: var(--bg-primary);
+        }
+        .message {
+            max-width: 85%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-size: 15px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: slideUp 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .message.user {
+            align-self: flex-end;
+            background: var(--accent-gradient);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.bot {
+            align-self: flex-start;
+            background: var(--bg-card);
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .message.error {
+            background: #5c2a2a;
+            color: #ffbaba;
+            border: 1px solid #ff6b6b;
+        }
+        .message .file-label {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-bottom: 4px;
+            display: block;
+        }
+        .message img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 6px;
+        }
+        @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+        /* Панель предпросмотра файла */
+        .file-preview {
+            display: none;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin: 0 16px 8px 16px;
+            border: 1px solid rgba(124,109,240,0.2);
+            flex-direction: column;
+            gap: 12px;
+            animation: slideUp 0.3s ease;
+        }
+        .file-preview.visible { display: flex; }
+        .file-preview .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .file-preview .preview-header .close-preview {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .file-preview .preview-content {
+            max-height: 150px;
+            overflow-y: auto;
+            background: var(--bg-input);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+        .file-preview .preview-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .file-preview .preview-actions input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 24px;
+            padding: 10px 16px;
+            color: var(--text-primary);
+            font-size: 15px;
+            outline: none;
+        }
+        .file-preview .preview-actions input:focus { border-color: var(--accent); }
+        .file-preview .preview-actions button {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .file-preview .preview-actions button:active { transform: scale(0.96); }
+
+        /* Область ввода */
+        .input-area {
+            padding: 12px 16px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .input-row textarea {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
+            padding: 12px 16px;
+            color: var(--text-primary);
+            font-size: 15px;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            outline: none;
+            transition: var(--transition);
+        }
+        .input-row textarea:focus { border-color: var(--accent); }
+        .input-row button {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        .input-row button:active { transform: scale(0.92); }
+        .input-row button.mic {
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            width: 44px;
+            height: 44px;
+            font-size: 18px;
+        }
+        .input-row button.mic.active { background: #f87171; color: #fff; }
+        .file-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .file-buttons label {
+            background: var(--bg-input);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: var(--transition);
+        }
+        .file-buttons label:hover { background: var(--accent); color: #fff; }
+        .file-buttons input[type="file"] { display: none; }
+
+        /* Панель генерации песен */
+        .gen-panel {
+            display: none;
+            flex-direction: column;
+            padding: 20px 24px;
+            gap: 16px;
+            flex: 1;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+        .gen-panel.visible { display: flex; }
+        .gen-panel .prompt-box {
+            background: var(--bg-card);
+            padding: 16px;
+            border-radius: var(--radius);
+            border-left: 4px solid var(--accent);
+        }
+        .gen-panel .prompt-box h3 { font-size: 18px; margin-bottom: 4px; color: var(--accent); }
+        .gen-panel textarea {
+            background: var(--bg-input);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius);
+            padding: 14px;
+            color: var(--text-primary);
+            font-size: 15px;
+            min-height: 80px;
+            resize: vertical;
+            outline: none;
+        }
+        .gen-panel textarea:focus { border-color: var(--accent); }
+        .gen-panel .gen-btn {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            padding: 14px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .gen-panel .gen-btn:active { transform: scale(0.97); }
+        .gen-result {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 14px;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .gen-audio {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .gen-audio button {
+            background: var(--bg-input);
+            border: none;
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .gen-audio button:hover { background: var(--accent); color: #fff; }
+
+        /* ===== АДМИН-ПАНЕЛЬ (модальное окно) ===== */
+        .admin-overlay {
+            display: none;
+            position: fixed;
+            top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(6px);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+        .admin-overlay.visible { display: flex; }
+        .admin-modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .admin-modal h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .admin-modal .close-admin {
+            float: right;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 28px;
+            cursor: pointer;
+        }
+        .admin-modal .form-group {
+            margin-bottom: 16px;
+        }
+        .admin-modal .form-group label {
+            display: block;
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        .admin-modal .form-group input, 
+        .admin-modal .form-group select,
+        .admin-modal .form-group textarea {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+        }
+        .admin-modal .form-group input:focus,
+        .admin-modal .form-group select:focus,
+        .admin-modal .form-group textarea:focus { border-color: var(--accent); }
+        .admin-modal .form-group textarea { min-height: 80px; resize: vertical; }
+        .admin-modal .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 16px 0;
+        }
+        .admin-modal .stats .stat-card {
+            background: var(--bg-card);
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .admin-modal .stats .stat-card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .admin-modal .stats .stat-card .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .admin-modal .admin-chat-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .admin-modal .admin-chat-list .admin-chat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 13px;
+        }
+        .admin-modal .admin-chat-list .admin-chat-item button {
+            background: none;
+            border: none;
+            color: #f87171;
+            cursor: pointer;
+        }
+        .admin-modal .save-settings {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 12px;
+            transition: var(--transition);
+        }
+        .admin-modal .save-settings:active { transform: scale(0.97); }
+
+        /* ===== УВЕДОМЛЕНИЯ (тосты) ===== */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+            max-width: 340px;
+        }
+        .toast {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 12px 18px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--accent);
+            animation: slideIn 0.3s ease;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toast.error { border-left-color: #f87171; }
+        .toast.success { border-left-color: #34d399; }
+        @keyframes slideIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+
+        /* ===== АДАПТИВ ===== */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                width: 280px;
+                border-radius: 0 var(--radius) var(--radius) 0;
+            }
+            .sidebar.open { transform: translateX(0); }
+            .chat-header .hamburger { display: block; }
+            .chat-header { padding: 12px 16px; }
+            .messages { padding: 16px; }
+            .file-preview { margin: 0 8px 8px 8px; }
+            .admin-modal { padding: 20px; }
+            .chat-header .mode-selector { margin-left: auto; }
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 9;
+        }
+        .overlay.visible { display: block; }
+
+        /* Скроллбар */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Боковая панель -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>Jarvis</h2>
+            <div class="actions">
+                <button id="newChatBtn" title="Новый чат">➕</button>
+                <button id="adminBtn" title="Админ-панель">⚙️</button>
+            </div>
+        </div>
+        <div class="chat-list" id="chatList"></div>
+        <div class="sidebar-footer">
+            <span>Чатов: <span id="chatCount">0</span></span>
+            <button id="clearAllBtn">🗑 Очистить всё</button>
+        </div>
+    </div>
+
+    <!-- Основная область -->
+    <div class="main">
+        <div class="chat-header">
+            <button class="hamburger" id="hamburgerBtn">☰</button>
+            <div class="title-area" id="titleArea">
+                <span class="title" id="currentChatTitle">Новый чат</span>
+                <button class="rename-btn" id="renameBtn" title="Переименовать">✏️</button>
+            </div>
+            <div class="mode-selector">
+                <label>🎭</label>
+                <select id="modeSelect">
+                    <option value="friend">Друг</option>
+                    <option value="teacher">Учитель</option>
+                    <option value="expert">Эксперт</option>
+                    <option value="psychologist">Психолог</option>
+                    <option value="creative">Креативный</option>
+                    <option value="custom">Свой</option>
+                </select>
+            </div>
+            <span style="font-size:12px; color:var(--text-secondary);" id="chatTimestamp"></span>
+        </div>
+
+        <!-- Сообщения -->
+        <div class="messages" id="messages"></div>
+
+        <!-- Панель генерации песен -->
+        <div class="gen-panel" id="genPanel">
+            <div class="prompt-box"><h3>🎶 Генератор песен</h3><p>Опишите тему, стиль, настроение – я сочиню текст и мелодию.</p></div>
+            <textarea id="genPrompt" placeholder="Например: романтичная баллада о космосе..."></textarea>
+            <button class="gen-btn" id="genBtn">🎼 Сгенерировать</button>
+            <div class="gen-result" id="genResult">Здесь будет текст...</div>
+            <div class="gen-audio" id="genAudioArea" style="display:none;">
+                <button id="playAudioBtn">▶ Прослушать</button>
+                <button id="stopAudioBtn">⏹ Остановить</button>
+            </div>
+        </div>
+
+        <!-- Панель предпросмотра файла -->
+        <div class="file-preview" id="filePreview">
+            <div class="preview-header">
+                <span id="previewFileName">Файл</span>
+                <button class="close-preview" id="closePreview">✕</button>
+            </div>
+            <div class="preview-content" id="previewContent">Текст файла...</div>
+            <div class="preview-actions">
+                <input type="text" id="previewPrompt" placeholder="Введите запрос к содержимому...">
+                <button id="previewSendBtn">Отправить</button>
+            </div>
+        </div>
+
+        <!-- Область ввода -->
+        <div class="input-area" id="inputArea">
+            <div class="file-buttons">
+                <label for="imageInput">🖼 Изображение</label>
+                <input type="file" id="imageInput" accept="image/*">
+                <label for="fileInput">📎 Файл</label>
+                <input type="file" id="fileInput" accept=".docx,.xlsx,.pdf,.pptx,.txt,.md,.csv,.json">
+            </div>
+            <div class="input-row">
+                <textarea id="userInput" rows="1" placeholder="Напишите сообщение..."></textarea>
+                <button class="mic" id="micBtn" title="Голосовой ввод">🎤</button>
+                <button id="sendBtn">➤</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Админ-панель (модалка) -->
+<div class="admin-overlay" id="adminOverlay">
+    <div class="admin-modal">
+        <button class="close-admin" id="closeAdmin">✕</button>
+        <h2>⚙️ Админ-панель</h2>
+        <div id="adminLogin" style="display:block;">
+            <div class="form-group">
+                <label>Введите пароль</label>
+                <input type="password" id="adminPassword" placeholder="Пароль">
+                <button class="save-settings" id="adminLoginBtn">Войти</button>
+            </div>
+        </div>
+        <div id="adminContent" style="display:none;">
+            <div class="stats">
+                <div class="stat-card"><div class="value" id="statMessages">0</div><div class="label">Всего сообщений</div></div>
+                <div class="stat-card"><div class="value" id="statChats">0</div><div class="label">Чатов</div></div>
+            </div>
+            <div class="form-group">
+                <label>Модель</label>
+                <select id="adminModel">
+                    <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                    <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                    <option value="gemma2-9b-it">Gemma 2 9B</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Температура (0.0 – 1.0)</label>
+                <input type="number" id="adminTemp" step="0.1" min="0" max="1" value="0.7">
+            </div>
+            <div class="form-group">
+                <label>Системный промпт по умолчанию</label>
+                <textarea id="adminSystemPrompt">Ты — Jarvis, умный помощник.</textarea>
+            </div>
+            <div class="form-group">
+                <label>Тема оформления</label>
+                <select id="adminTheme">
+                    <option value="dark">Тёмная</option>
+                    <option value="light">Светлая</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Управление чатами</label>
+                <div class="admin-chat-list" id="adminChatList"></div>
+            </div>
+            <button class="save-settings" id="saveAdminSettings">Сохранить настройки</button>
+        </div>
+    </div>
+</div>
+
+<!-- Контейнер уведомлений -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+    // ==================== КОНФИГ ====================
+    const API_KEY = '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';
+    const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    // ==================== СОСТОЯНИЕ ====================
+    let chats = [];
+    let currentChatId = null;
+    let isGenMode = false;
+    let audioPlayer = null;
+    let isProcessing = false;
+    let pendingFileData = null; // { type: 'image'|'file', content: base64|text, name: string }
+
+    // Настройки (загружаем из localStorage)
+    let settings = {
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.7,
+        systemPrompt: 'Ты — Jarvis, умный помощник. Отвечай чётко, по делу.',
+        theme: 'dark'
+    };
+
+    // Режимы ИИ
+    const modes = {
+        friend: { label: 'Друг', system: 'Ты — лучший друг. Отвечай тепло, поддерживающе, с эмпатией. Используй неформальный стиль.' },
+        teacher: { label: 'Учитель', system: 'Ты — опытный преподаватель. Объясняй доступно, структурированно, с примерами. Поощряй любопытство.' },
+        expert: { label: 'Эксперт', system: 'Ты — узкоспециализированный эксперт. Отвечай профессионально, точно, по делу. Ссылайся на факты.' },
+        psychologist: { label: 'Психолог', system: 'Ты — психолог-консультант. Будь внимательным, задавай наводящие вопросы, помогай разобраться в чувствах.' },
+        creative: { label: 'Креативный', system: 'Ты — генератор идей. Предлагай нестандартные, креативные решения. Вдохновляй.' },
+        custom: { label: 'Свой', system: 'Ты — Jarvis.' }
+    };
+
+    // ==================== ЗАГРУЗКА/СОХРАНЕНИЕ ====================
+    function loadData() {
+        try {
+            const savedChats = localStorage.getItem('jarvis_chats');
+            chats = savedChats ? JSON.parse(savedChats) : [];
+            const savedSettings = localStorage.getItem('jarvis_settings');
+            if (savedSettings) settings = { ...settings, ...JSON.parse(savedSettings) };
+        } catch(e) { chats = []; }
+        if (!chats.length) {
+            chats.push({ id: Date.now().toString(36), title: 'Новый чат', messages: [{ role: 'bot', content: '👋 Привет! Я Jarvis. Выберите режим и начните общение.' }] });
+        }
+        currentChatId = chats[0].id;
+        applyTheme();
+    }
+    function saveChats() {
+        localStorage.setItem('jarvis_chats', JSON.stringify(chats));
+        updateUI();
+    }
+    function saveSettings() {
+        localStorage.setItem('jarvis_settings', JSON.stringify(settings));
+        applyTheme();
+    }
+
+    // ==================== UI ОБНОВЛЕНИЯ ====================
+    function updateUI() {
+        renderChatList();
+        renderMessages();
+        updateHeader();
+        document.getElementById('chatCount').textContent = chats.length;
+        document.getElementById('messages').style.display = isGenMode ? 'none' : 'flex';
+        document.getElementById('inputArea').style.display = isGenMode ? 'none' : 'flex';
+        document.getElementById('genPanel').classList.toggle('visible', isGenMode);
+        // Скрываем предпросмотр при переключении
+        document.getElementById('filePreview').classList.remove('visible');
+        pendingFileData = null;
+    }
+
+    function renderChatList() {
+        const container = document.getElementById('chatList');
+        container.innerHTML = '';
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'title';
+            titleSpan.textContent = chat.title || 'Без названия';
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            // Кнопка переименования (в списке тоже можно)
+            const renameBtn = document.createElement('button');
+            renameBtn.textContent = '✏️';
+            renameBtn.title = 'Переименовать';
+            renameBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startRename(chat.id);
+            });
+            const delBtn = document.createElement('button');
+            delBtn.className = 'del-btn';
+            delBtn.textContent = '✕';
+            delBtn.title = 'Удалить чат';
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteChat(chat.id);
+            });
+            actions.appendChild(renameBtn);
+            actions.appendChild(delBtn);
+            div.appendChild(titleSpan);
+            div.appendChild(actions);
+            div.addEventListener('click', () => switchChat(chat.id));
+            container.appendChild(div);
+        });
+    }
+
+    function renderMessages() {
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        const chat = chats.find(c => c.id === currentChatId);
+        if (!chat) return;
+        chat.messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = `message ${msg.role === 'error' ? 'error' : msg.role}`;
+            div.innerHTML = (msg.content || '').replace(/\n/g, '<br>');
+            container.appendChild(div);
+        });
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function updateHeader() {
+        const chat = chats.find(c => c.id === currentChatId);
+        if (chat) {
+            const titleEl = document.getElementById('currentChatTitle');
+            titleEl.textContent = chat.title || 'Новый чат';
+            // Если режим редактирования, не перезаписываем инпут
+            const renameInput = document.querySelector('.rename-input');
+            if (!renameInput) {
+                // отображаем как текст
+            }
+            const last = chat.messages[chat.messages.length-1];
+            const tsEl = document.getElementById('chatTimestamp');
+            if (last && last.timestamp) {
+                const d = new Date(last.timestamp);
+                tsEl.textContent = d.toLocaleString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+            } else {
+                tsEl.textContent = '';
+            }
+        }
+    }
+
+    function addMessage(chatId, role, content, timestamp = null) {
+        const chat = chats.find(c => c.id === chatId);
+        if (!chat) return;
+        if (!timestamp) timestamp = Date.now();
+        chat.messages.push({ role, content, timestamp });
+        if (role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {
+            const short = content.length > 30 ? content.substring(0, 30)+'…' : content;
+            chat.title = short || 'Новый чат';
+        }
+        saveChats();
+        if (chatId === currentChatId && !isGenMode) {
+            renderMessages();
+            updateHeader();
+        }
+    }
+
+    // ==================== УПРАВЛЕНИЕ ЧАТАМИ ====================
+    function switchChat(id) {
+        if (currentChatId === id) return;
+        currentChatId = id;
+        isGenMode = false;
+        updateUI();
+        closeSidebar();
+        // Сбрасываем предпросмотр
+        document.getElementById('filePreview').classList.remove('visible');
+        pendingFileData = null;
+    }
+
+    function deleteChat(id) {
+        if (chats.length <= 1) { showToast('Нельзя удалить последний чат.', 'error'); return; }
+        chats = chats.filter(c => c.id !== id);
+        if (currentChatId === id) currentChatId = chats[0].id;
+        saveChats();
+        showToast('Чат удалён', 'success');
+    }
+
+    function createNewChat() {
+        const newChat = { id: Date.now().toString(36), title: 'Новый чат', messages: [{ role: 'bot', content: '👋 Чем могу помочь?' }] };
+        chats.push(newChat);
+        currentChatId = newChat.id;
+        isGenMode = false;
+        saveChats();
+        closeSidebar();
+        showToast('Новый чат создан', 'success');
+    }
+
+    function clearAllChats() {
+        if (!confirm('Удалить все чаты?')) return;
+        chats = [];
+        const newChat = { id: Date.now().toString(36), title: 'Новый чат', messages: [{ role: 'bot', content: '👋 Привет! Я Jarvis.' }] };
+        chats.push(newChat);
+        currentChatId = newChat.id;
+        isGenMode = false;
+        saveChats();
+        showToast('Все чаты очищены', 'success');
+    }
+
+    // ==================== ПЕРЕИМЕНОВАНИЕ ====================
+    function startRename(chatId) {
+        const chat = chats.find(c => c.id === chatId);
+        if (!chat) return;
+        const titleArea = document.getElementById('titleArea');
+        const currentTitle = chat.title;
+        // Создаем инпут
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'rename-input';
+        input.value = currentTitle;
+        input.maxLength = 40;
+        // Заменяем содержимое
+        titleArea.innerHTML = '';
+        titleArea.appendChild(input);
+        input.focus();
+        input.select();
+        const finishRename = () => {
+            const newTitle = input.value.trim() || 'Без названия';
+            chat.title = newTitle;
+            saveChats();
+            // Восстанавливаем заголовок
+            titleArea.innerHTML = `<span class="title" id="currentChatTitle">${newTitle}</span>
+                <button class="rename-btn" id="renameBtn" title="Переименовать">✏️</button>`;
+            // Перепривязываем событие
+            document.getElementById('renameBtn').addEventListener('click', () => startRename(chatId));
+            updateHeader();
+            renderChatList();
+            showToast('Название обновлено', 'success');
+        };
+        input.addEventListener('blur', finishRename);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { input.blur(); }
+            if (e.key === 'Escape') { input.value = currentTitle; input.blur(); }
+        });
+        // Обновляем глобальный обработчик для кнопки
+    }
+
+    // ==================== ЗАПРОС К GROQ ====================
+    async function askGroq(messages, model = null, temperature = null) {
+        const m = model || settings.model;
+        const t = temperature !== null ? temperature : settings.temperature;
+        try {
+            const response = await fetch(GROQ_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: m, messages, temperature: t, max_tokens: 1024 })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || `HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            return data.choices[0].message.content;
+        } catch (e) {
+            console.error('Groq API error:', e);
+            throw new Error(`Ошибка API: ${e.message}`);
+        }
+    }
+
+    // ==================== ОТПРАВКА СООБЩЕНИЯ ====================
+    async function sendUserMessage(text, fileContent = null, imageBase64 = null) {
+        if (isProcessing) return;
+        if (!text.trim() && !fileContent && !imageBase64) return;
+
+        const chatId = currentChatId;
+        if (!chatId) return;
+
+        isProcessing = true;
+        let userMsg = text.trim() || '';
+        if (fileContent) userMsg += (userMsg ? '\n' : '') + '📎 [Файл]';
+        if (imageBase64) userMsg += (userMsg ? '\n' : '') + '🖼 [Изображение]';
+        if (!userMsg) userMsg = 'Сообщение';
+
+        addMessage(chatId, 'user', userMsg);
+
+        let promptText = text.trim() || '';
+
+        // Обработка изображения (OCR)
+        if (imageBase64) {
+            try {
+                addMessage(chatId, 'bot', '⏳ Распознаю текст с изображения...');
+                const result = await Tesseract.recognize(imageBase64, 'rus+eng', { logger: m => console.log(m) });
+                const ocrText = result.data.text.trim();
+                if (ocrText) {
+                    promptText += (promptText ? '\n\n' : '') + 'Текст с изображения:\n' + ocrText;
+                } else {
+                    promptText += (promptText ? '\n\n' : '') + '(На изображении не найден текст)';
+                }
+                const chat = chats.find(c => c.id === chatId);
+                chat.messages.pop(); // удаляем "Распознаю..."
+                saveChats();
+            } catch(e) {
+                console.warn('OCR error:', e);
+                promptText += (promptText ? '\n\n' : '') + '(Ошибка распознавания изображения)';
+            }
+        }
+
+        if (fileContent) {
+            promptText += (promptText ? '\n\n' : '') + 'Содержимое файла:\n' + fileContent;
+        }
+
+        if (!promptText.trim()) {
+            promptText = 'Проанализируй предоставленную информацию.';
+        }
+
+        // Получаем системный промпт из выбранного режима
+        const mode = document.getElementById('modeSelect').value;
+        const systemContent = modes[mode] ? modes[mode].system : settings.systemPrompt;
+
+        // История
+        const chat = chats.find(c => c.id === chatId);
+        const history = chat.messages.slice(-10)
+            .filter(m => m.content && m.content.trim())
+            .map(m => {
+                let role = m.role;
+                if (role === 'bot') role = 'assistant';
+                else if (role === 'error') role = 'user';
+                return { role, content: m.content };
+            });
+
+        const apiMessages = [
+            { role: 'system', content: systemContent },
+            ...history,
+            { role: 'user', content: promptText }
+        ];
+
+        addMessage(chatId, 'bot', '⏳ Думаю...');
+        const msgList = document.querySelectorAll('.message');
+        const lastMsg = msgList[msgList.length-1];
+
+        try {
+            const reply = await askGroq(apiMessages);
+            lastMsg.innerHTML = reply.replace(/\n/g, '<br>');
+            chat.messages[chat.messages.length-1].content = reply;
+            chat.messages[chat.messages.length-1].timestamp = Date.now();
+            saveChats();
+            renderMessages();
+            updateHeader();
+        } catch (err) {
+            lastMsg.innerHTML = `❌ Ошибка: ${err.message}`;
+            lastMsg.className = 'message error';
+            chat.messages[chat.messages.length-1].content = `❌ Ошибка: ${err.message}`;
+            chat.messages[chat.messages.length-1].role = 'error';
+            saveChats();
+            showToast(err.message, 'error');
+        }
+        isProcessing = false;
+    }
+
+    // ==================== ОБРАБОТКА ФАЙЛОВ (универсальная) ====================
+    async function extractTextFromFile(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const arrayBuffer = await file.arrayBuffer();
+
+        try {
+            if (ext === 'docx') {
+                const result = await mammoth.extractRawText({ arrayBuffer });
+                return result.value;
+            } else if (ext === 'xlsx') {
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                let text = '';
+                workbook.SheetNames.forEach(sheetName => {
+                    const sheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                    json.forEach(row => text += row.join(' ') + '\n');
+                });
+                return text;
+            } else if (ext === 'pdf') {
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let text = '';
+                for (let i=1; i<=pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(' ') + '\n';
+                }
+                return text;
+            } else if (ext === 'pptx') {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                let text = '';
+                const slideFiles = Object.keys(zip.files).filter(name => name.startsWith('ppt/slides/slide') && name.endsWith('.xml'));
+                for (const slideFile of slideFiles) {
+                    const xml = await zip.files[slideFile].async('string');
+                    const matches = xml.match(/<a:t>(.*?)<\/a:t>/g);
+                    if (matches) {
+                        matches.forEach(m => {
+                            const content = m.replace(/<a:t>/g,'').replace(/<\/a:t>/g,'');
+                            text += content + ' ';
+                        });
+                    }
+                }
+                return text;
+            } else {
+                return await file.text();
+            }
+        } catch (e) {
+            throw new Error(`Не удалось прочитать ${file.name}: ${e.message}`);
+        }
+    }
+
+    // ==================== ПОКАЗ ПРЕДПРОСМОТРА ФАЙЛА ====================
+    function showFilePreview(type, content, name) {
+        const preview = document.getElementById('filePreview');
+        const previewContent = document.getElementById('previewContent');
+        const previewFileName = document.getElementById('previewFileName');
+        previewFileName.textContent = name;
+        previewContent.textContent = content || ' (нет текста для отображения)';
+        preview.classList.add('visible');
+        // Сохраняем данные
+        pendingFileData = { type, content, name };
+        document.getElementById('previewPrompt').value = '';
+        document.getElementById('previewPrompt').focus();
+    }
+
+    // ==================== ГЕНЕРАЦИЯ ПЕСНИ ====================
+    async function generateSong() {
+        const prompt = document.getElementById('genPrompt').value.trim();
+        if (!prompt) {
+            document.getElementById('genResult').textContent = '❗ Введите тему или описание.';
+            return;
+        }
+        document.getElementById('genResult').textContent = '⏳ Сочиняем...';
+        try {
+            const messages = [
+                { role: 'system', content: 'Ты — поэт-песенник. Напиши текст песни, в конце укажи BPM и тональность.' },
+                { role: 'user', content: `Тема: ${prompt}` }
+            ];
+            const reply = await askGroq(messages, settings.model, 0.9);
+            document.getElementById('genResult').textContent = reply;
+            const bpmMatch = reply.match(/BPM\s*[:\-]?\s*(\d+)/i);
+            const keyMatch = reply.match(/тональность\s*[:\-]?\s*([A-G][#b]?\s*(major|minor)?)/i);
+            const bpm = bpmMatch ? parseInt(bpmMatch[1]) : 120;
+            const key = keyMatch ? keyMatch[1] : 'C major';
+            await generateMelody(bpm, key);
+            document.getElementById('genAudioArea').style.display = 'flex';
+        } catch (e) {
+            document.getElementById('genResult').textContent = `❌ Ошибка: ${e.message}`;
+            showToast(e.message, 'error');
+        }
+    }
+
+    async function generateMelody(bpm, key) {
+        if (audioPlayer) { audioPlayer.stop(); audioPlayer.dispose(); audioPlayer = null; }
+        const synth = new Tone.Synth().toDestination();
+        const notes = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'];
+        Tone.Transport.bpm.value = bpm;
+        const pattern = new Tone.Pattern((time, note) => {
+            synth.triggerAttackRelease(note, '8n', time);
+        }, notes, 'randomOnce');
+        pattern.loop = false;
+        audioPlayer = pattern;
+        pattern.start(0);
+        Tone.Transport.start();
+        setTimeout(() => {
+            if (audioPlayer) {
+                Tone.Transport.stop();
+                audioPlayer.stop();
+                audioPlayer.dispose();
+                audioPlayer = null;
+                document.getElementById('genAudioArea').style.display = 'none';
+            }
+        }, 10000);
+    }
+
+    // ==================== ТОСТЫ ====================
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(40px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    // ==================== ТЕМА ====================
+    function applyTheme() {
+        document.body.classList.toggle('light', settings.theme === 'light');
+    }
+
+    // ==================== АДМИН-ПАНЕЛЬ ====================
+    function openAdmin() {
+        document.getElementById('adminOverlay').classList.add('visible');
+        document.getElementById('adminLogin').style.display = 'block';
+        document.getElementById('adminContent').style.display = 'none';
+        document.getElementById('adminPassword').value = '';
+        document.getElementById('adminPassword').focus();
+        // Обновляем статистику
+        const totalMsgs = chats.reduce((acc, c) => acc + c.messages.length, 0);
+        document.getElementById('statMessages').textContent = totalMsgs;
+        document.getElementById('statChats').textContent = chats.length;
+        // Заполняем настройки
+        document.getElementById('adminModel').value = settings.model;
+        document.getElementById('adminTemp').value = settings.temperature;
+        document.getElementById('adminSystemPrompt').value = settings.systemPrompt;
+        document.getElementById('adminTheme').value = settings.theme;
+        renderAdminChatList();
+    }
+
+    function renderAdminChatList() {
+        const container = document.getElementById('adminChatList');
+        container.innerHTML = '';
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = 'admin-chat-item';
+            div.innerHTML = `<span>${chat.title} (${chat.messages.length} сообщ.)</span>
+                <button data-id="${chat.id}">🗑</button>`;
+            div.querySelector('button').addEventListener('click', () => {
+                if (confirm(`Удалить чат "${chat.title}"?`)) {
+                    deleteChat(chat.id);
+                    renderAdminChatList();
+                    document.getElementById('statChats').textContent = chats.length;
+                }
+            });
+            container.appendChild(div);
+        });
+    }
+
+    // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+        updateUI();
+
+        // ===== Отправка текста =====
+        const sendBtn = document.getElementById('sendBtn');
+        const userInput = document.getElementById('userInput');
+        sendBtn.addEventListener('click', () => {
+            const text = userInput.value.trim();
+            if (text) {
+                // Проверяем, есть ли ожидающий файл? Нет, файл обрабатывается отдельно через предпросмотр.
+                sendUserMessage(text);
+                userInput.value = '';
+                userInput.style.height = 'auto';
+            }
+        });
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
+            }
+        });
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // ===== Голос =====
+        let recognition = null;
+        const micBtn = document.getElementById('micBtn');
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ru-RU';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            micBtn.addEventListener('click', () => {
+                if (micBtn.classList.contains('active')) {
+                    recognition.stop();
+                    return;
+                }
+                try {
+                    recognition.start();
+                    micBtn.classList.add('active');
+                    micBtn.textContent = '⏹';
+                } catch(e) {
+                    showToast('Микрофон не доступен', 'error');
+                }
+            });
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                userInput.value = transcript;
+                userInput.dispatchEvent(new Event('input'));
+                micBtn.classList.remove('active');
+                micBtn.textContent = '🎤';
+                // Не отправляем автоматически, даём пользователю отредактировать
+                showToast('Речь распознана, отредактируйте и отправьте', 'success');
+            };
+            recognition.onerror = (e) => {
+                micBtn.classList.remove('active');
+                micBtn.textContent = '🎤';
+                showToast('Ошибка распознавания', 'error');
+            };
+            recognition.onend = () => {
+                micBtn.classList.remove('active');
+                micBtn.textContent = '🎤';
+            };
+        } else {
+            micBtn.style.opacity = '0.4';
+            micBtn.title = 'Голос не поддерживается';
+        }
+
+        // ===== Загрузка изображения (только предпросмотр) =====
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const base64 = ev.target.result;
+                // Показываем предпросмотр с извлечением текста
+                try {
+                    showFilePreview('image', 'Распознаю текст...', file.name);
+                    const result = await Tesseract.recognize(base64, 'rus+eng', { logger: m => console.log(m) });
+                    const text = result.data.text.trim() || '(текст не найден)';
+                    // Обновляем содержимое предпросмотра
+                    document.getElementById('previewContent').textContent = text;
+                    pendingFileData = { type: 'image', content: base64, name: file.name, extractedText: text };
+                } catch(err) {
+                    showFilePreview('image', 'Ошибка распознавания', file.name);
+                    pendingFileData = { type: 'image', content: base64, name: file.name, extractedText: '' };
+                }
+                document.getElementById('imageInput').value = '';
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // ===== Загрузка файла =====
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await extractTextFromFile(file);
+                showFilePreview('file', text, file.name);
+                pendingFileData = { type: 'file', content: text, name: file.name };
+            } catch (err) {
+                showToast(`Ошибка чтения файла: ${err.message}`, 'error');
+                showFilePreview('file', `Ошибка: ${err.message}`, file.name);
+                pendingFileData = null;
+            }
+            document.getElementById('fileInput').value = '';
+        });
+
+        // ===== Закрыть предпросмотр =====
+        document.getElementById('closePreview').addEventListener('click', () => {
+            document.getElementById('filePreview').classList.remove('visible');
+            pendingFileData = null;
+        });
+
+        // ===== Отправить из предпросмотра =====
+        document.getElementById('previewSendBtn').addEventListener('click', async () => {
+            if (!pendingFileData) return;
+            const prompt = document.getElementById('previewPrompt').value.trim();
+            const { type, content, name } = pendingFileData;
+            // Отправляем
+            if (type === 'image') {
+                await sendUserMessage(prompt, null, content);
+            } else {
+                await sendUserMessage(prompt, content, null);
+            }
+            document.getElementById('filePreview').classList.remove('visible');
+            pendingFileData = null;
+            document.getElementById('previewPrompt').value = '';
+        });
+
+        // ===== Переключение режима =====
+        document.getElementById('modeSelect').addEventListener('change', function() {
+            const mode = this.value;
+            if (mode === 'custom') {
+                const custom = prompt('Введите свой системный промпт:', settings.systemPrompt);
+                if (custom) {
+                    modes.custom.system = custom;
+                    showToast('Режим "Свой" обновлён', 'success');
+                } else {
+                    this.value = 'friend';
+                }
+            } else {
+                showToast(`Режим: ${modes[mode].label}`, 'success');
+            }
+        });
+
+        // ===== Переименование (кнопка в шапке) =====
+        document.getElementById('renameBtn')?.addEventListener('click', () => {
+            if (currentChatId) startRename(currentChatId);
+        });
+
+        // ===== Боковая панель =====
+        document.getElementById('hamburgerBtn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('visible');
+        });
+        document.getElementById('overlay').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('overlay').classList.remove('visible');
+        });
+        document.getElementById('messages').addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+                document.getElementById('overlay').classList.remove('visible');
+            }
+        });
+
+        // ===== Новый чат и очистка =====
+        document.getElementById('newChatBtn').addEventListener('click', createNewChat);
+        document.getElementById('clearAllBtn').addEventListener('click', clearAllChats);
+
+        // ===== Генерация песен =====
+        document.getElementById('genBtn').addEventListener('click', generateSong);
+        document.getElementById('playAudioBtn').addEventListener('click', () => {
+            if (audioPlayer) Tone.Transport.start();
+        });
+        document.getElementById('stopAudioBtn').addEventListener('click', () => {
+            if (audioPlayer) {
+                Tone.Transport.stop();
+                audioPlayer.stop();
+                audioPlayer.dispose();
+                audioPlayer = null;
+                document.getElementById('genAudioArea').style.display = 'none';
+            }
+        });
+
+        // ===== Переключение на генерацию (двойной клик по заголовку) =====
+        document.getElementById('currentChatTitle').addEventListener('dblclick', () => {
+            isGenMode = !isGenMode;
+            updateUI();
+            if (isGenMode) closeSidebar();
+        });
+
+        // ===== Админ-панель =====
+        document.getElementById('adminBtn').addEventListener('click', openAdmin);
+        document.getElementById('closeAdmin').addEventListener('click', () => {
+            document.getElementById('adminOverlay').classList.remove('visible');
+        });
+        document.getElementById('adminOverlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                document.getElementById('adminOverlay').classList.remove('visible');
+            }
+        });
+
+        document.getElementById('adminLoginBtn').addEventListener('click', () => {
+            const pass = document.getElementById('adminPassword').value;
+            if (pass === '140612') {
+                document.getElementById('adminLogin').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'block';
+                renderAdminChatList();
+                showToast('Доступ разрешён', 'success');
+            } else {
+                showToast('Неверный пароль', 'error');
+            }
+        });
+
+        document.getElementById('saveAdminSettings').addEventListener('click', () => {
+            settings.model = document.getElementById('adminModel').value;
+            settings.temperature = parseFloat(document.getElementById('adminTemp').value) || 0.7;
+            settings.systemPrompt = document.getElementById('adminSystemPrompt').value.trim() || 'Ты — Jarvis, умный помощник.';
+            settings.theme = document.getElementById('adminTheme').value;
+            saveSettings();
+            // Обновить режим "Свой" если он активен
+            if (document.getElementById('modeSelect').value === 'custom') {
+                modes.custom.system = settings.systemPrompt;
+            }
+            showToast('Настройки сохранены', 'success');
+            document.getElementById('adminOverlay').classList.remove('visible');
+        });
+
+        // Закрытие админки по Esc
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('adminOverlay').classList.remove('visible');
+            }
+        });
+
+        // ===== Глобальная обработка ошибок =====
+        window.onerror = (msg, url, line, col, error) => {
+            showToast(`Ошибка: ${msg}`, 'error');
+            return true;
+        };
+    });
+
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('overlay').classList.remove('visible');
+    }
+</script>
+</body>
+</html>
